@@ -1,55 +1,28 @@
-rFactor Remote LCD
+pyRFtelemetry
 ==================
 
-rfactorlcd is a remote HUD for rFactor and compatible games (e.g. Game
-Stock Car Extreme). It allows to display information such as speed,
-rpm, oil temperature and current position on a second monitor or on
-another computer.
-
-rfactorlcd-gui.py is covered under the GPL, while the rfactorlcdPlugin
-is covered under LGPL.
+Based in rfactorlcd, just provide an easy output of rfactor data to python clients
 
 
 Installation
 ------------
 
-rfactorlcd consists of two parts, a rFactor plugin that makes the
-telemetry data available over the network and a simple app to display
-that data.
-
 The plugin source can be found in src/ and can be compiled with Visual
 Studio Express. The resulting .dll has to be copied over into rFators
-Plugins/ directory.
+Plugins/ directory. This part is identical to original rFactorLCDPlugin.
+
+Compilation: If you cannot make sense of Visual Studio projects (cannot blame you), just:
+- Install the Visual Studio Community (it's free), go brew a coffee, read a book, it will take a while
+- Open a console
+  - type:  cd c:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin
+  - type:  vcvars32.bat
+- on _that same console_ do not close it!
+  - cd to the scr folder
+  - type: cl rfactorlcd.cpp /LD
+  - you should have not the .dll compiled
 
 The rFactorLCDPlugin.ini file allows to customize the port on which
 the plugin is listening, the default port is TCP/4580.
-
-Once rFactor is running, start rfactorlcd and give it the IP of the
-computer that is running rFactor on, e.g.:
-
-./rfactorlcd-gui.py 192.168.1.1
-
-If you want to run rfactorlcd on a second display, instead of another
-computer, start it with:
-
-./rfactorlcd-gui.py 127.0.0.1
-
-The plugin doesn't limited the number of connected computers, so
-connecting from multiple laptops should work.
-
-To see a list of all available options:
-
-./rfactorlcd-gui.py --help
-
-
-Development
------------
-
-rfactorlcd-gui.py is writen in Python2.7 and uses Gtk and Cairo for
-the rendering. To create a new Dashlets, create a new file for it in
-`rfactorlcd/dashlets/`, use the existing dashlets for guidance. The
-dashlet will automatically be detected and made available in
-rfactorlcd-gui.py.
 
 
 Security
@@ -70,6 +43,6 @@ data basically raw over the network, using around 40kB/s.
 Disclaimer
 ----------
 
-rfactorlcd is a homebrew tool for rFactor, GSC2013 and other
-compatible games and in no way affiliated with Image Space
-Incorporated, SimBin Studios or Reiza Studios.
+rfactorlcd and pyrftelemetry are homebrew tools for rFactor, 
+GSC2013 and other compatible games and in no way affiliated 
+with Image Space Incorporated, SimBin Studios or Reiza Studios.
