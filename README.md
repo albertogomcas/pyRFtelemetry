@@ -14,8 +14,7 @@ Plugins/ directory. This part is identical to original rFactorLCDPlugin.
 Compilation: If you cannot make sense of Visual Studio projects (cannot blame you), just:
 - Install the Visual Studio Community (it's free), go brew a coffee, read a book, it will take a while
 - Open a console
-  - type:  cd c:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin
-  - type:  vcvars32.bat
+  - type:  c:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin\vcvars32.bat
 - on _that same console_ do not close it!
   - cd to the scr folder
   - type: cl rfactorlcd.cpp /LD
