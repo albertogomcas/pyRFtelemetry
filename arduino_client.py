@@ -17,6 +17,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""
+This client consumes telemetry data and can feed an arduino via serial port
+"""
 
 from pyRFtelemetry.consumers import ArduinoRelay
 from pyRFtelemetry.network_client import NetworkClient
@@ -24,6 +27,7 @@ import logging
 import threading
 import sys
 import serial
+
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -38,20 +42,10 @@ if __name__ == '__main__':
     client_thread = threading.Thread(target=client.run)
     client_thread.daemon = True
     client_thread.start()
-       
-    ## Boolean variable that will represent
-    ## whether or not the arduino is connected
-    connected = False
-    
+           
     ## open the serial port that your ardiono
     ## is connected to.
-    ser = serial.Serial("COM5", 9600, timeout=1)
-    
-    ## loop until the arduino tells us it is ready
-    while not connected:
-        rd=ser.read()
-        if len(rd) >0:
-            connected = True
+    ser = serial.Serial("COM3", 9600, timeout=1)
     
     consumer = ArduinoRelay(client, ser)
     try:
