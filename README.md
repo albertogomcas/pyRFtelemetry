@@ -2,7 +2,9 @@ pyRFtelemetry
 ==================
 
 Based in rfactorlcd, just provide an easy output of rfactor data to python clients
+This library uses Python 3!
 
+For an arduino client implementation see /arduino or https://codebender.cc/sketch:190310
 
 Installation
 ------------
