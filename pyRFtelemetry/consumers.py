@@ -19,7 +19,60 @@
 
 
 from .RFstructs import StructFactory, TelemetryData, InfoData, ScoreData, VehicleData
-import struct
+from ctypes import Structure, c_int16, c_int8, c_uint8, c_uint16, c_byte, sizeof, memmove
+import ctypes
+import math
+
+class Datagram(Structure):
+    def checksum(self):
+        buf = (c_byte*(sizeof(self)-1))()
+        memmove(buf, ctypes.byref(self), sizeof(self)-1)
+        self.check = buf[0]
+        for b2 in buf[1:]:
+            self.check ^= b2
+        
+    def serialize(self):
+        self.checksum()
+        return ctypes.string_at(ctypes.byref(self), ctypes.sizeof(self))
+
+header1 = 0xaa #1010 1010
+header2 = 0x50 #0101 0000 (reserved 4 bits)
+tlmt_tag = 0x01
+vhcl_tag = 0x02
+
+class TelemetryDatagram(Datagram):
+    #matches Arduino structs
+    _fields_ = [
+        ("header1", c_byte),
+        ("header2", c_byte),
+        ("gear", c_byte),
+        ("speed", c_int16),
+        ("ledrevs", c_byte),
+        ("fuel", c_byte),
+        ("grip", c_byte),
+        ("lap", c_byte),
+        ("autonomy", c_byte),
+        ("check", c_byte),
+    ]
+    _pack_=1
+
+class VehicleDatagram(Datagram):
+    #matches Arduino structs
+    _fields_ = [
+        ("header1", c_byte),
+        ("header2", c_byte),
+        ("place", c_uint8),
+        ("total_laps", c_uint8), 
+        ("delta", c_int16), #time in 1/10 second, max +-25s
+        ("behind", c_uint16), #time in 1/10 second, max 655s
+        ("res1", c_byte),
+        ("res2", c_byte),
+        ("check", c_byte),
+    ]
+    _pack_=1
+
+assert ctypes.sizeof(VehicleDatagram) == ctypes.sizeof(TelemetryDatagram)
+
 
 class DataConsumer(object):
     def __init__(self, client):
@@ -34,55 +87,77 @@ class DataConsumer(object):
             for tag, payload in data.items():
                 self.dispatch_message(tag, payload)
 
+class fake_serial(object):
+    def write(self, msg):
+        print(msg)
+        
+    def close(self):
+        pass
 
 
 class ArduinoRelay(DataConsumer):
     def __init__(self, client, ard_serial):
         DataConsumer.__init__(self, client)
-        self.telemetry=None
         self.ard_serial=ard_serial
         self.rev_leds_thresholds = [0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.97, 0.985, 2]
+        self.current_lap = None
+        self.lap_start_fuel = None
+        self.fuel_per_lap = None
+        
+    def update_fuel_per_lap(self, tlmt):
+        if tlmt.lap_number > 1: 
+            if tlmt.lap_number != self.current_lap:
+                self.fuel_per_lap = self.lap_start_fuel - tlmt.fuel
+                self.lap_start_fuel = tlmt.fuel
+                self.current_lap = tlmt.lap_number
+                #print("Updated ", self.fuel_per_lap, self.current_lap, self.lap_start_fuel)
+        else:
+            if not self.lap_start_fuel and tlmt.lap_number == 1:
+                self.lap_start_fuel = tlmt.fuel
+                self.fuel_per_lap = 0
+            
         
     def dispatch_message(self, tag, payload):
         st=StructFactory.assemble(tag,payload)
         
         if isinstance(st, TelemetryData):
-            mode=struct.pack(">B", 0)
-            if st.gear >= 0:
-                gear=struct.pack(">B", st.gear)
-            else:
-                gear=struct.pack(">B", 255)
+            self.update_fuel_per_lap(st)
+            dt = TelemetryDatagram()
+            dt.header1 = header1
+            dt.header2 = header2 | tlmt_tag
+            dt.gear = st.gear if st.gear >= 0 else 255 
             #in RF +z points to back of car
-            speed = abs(int(st.velocity[2]*3.6))
-            s1=struct.pack(">B", speed & 0x00ff)
-            s2=struct.pack(">B", (speed & 0xff00)>>8)
-            
+            dt.speed = abs(int(st.velocity[2]*3.6))
+          
             rev_fraction = st.engine_rpm/st.max_engine_rpm
-            for i, rt in enumerate(self.rev_leds_thresholds):
+            for ledstate, rt in enumerate(self.rev_leds_thresholds):
                 if rt > rev_fraction:
                     break
-            led=struct.pack(">B", i)
-            fuel=struct.pack(">B",int(st.fuel))
-            res=struct.pack(">B", 0)
-            
-            dt1=struct.pack(">B", 0)
-            dt2=struct.pack(">B", 0)
-            dt3=struct.pack(">B", 0)
-            dt4=struct.pack(">B", 0)
-            dt5=struct.pack(">B", 0)
-
-            msg= b"".join([b'\xff', mode, gear, s1, s2, led, fuel, res, dt1, dt2, dt3, dt4, dt5])
-            self.ard_serial.write(msg)            
-            
-        if isinstance(st, InfoData):
-            for field, tp in st._fields_:
-                print(field, st.__getattribute__(field))
-            
+            dt.ledrevs = ledstate
+            dt.fuel = int(st.fuel)
+            dt.lap = st.lap_number 
+            dt.autonomy = int(math.floor(st.fuel/self.fuel_per_lap)) if self.fuel_per_lap else 0
+            self.ard_serial.write(dt.serialize())
+      
+                       
         if isinstance(st, list):
             if isinstance(st[0], VehicleData):
                 for v in st:
-                    print(v.driver_name)
-                    print(v.best_lap_time)
+                    if v.is_player:
+                        dt = VehicleDatagram()
+                        dt.header1 = header1
+                        dt.header2 = header2 | vhcl_tag
+                        dt.place = v.place
+                        #times in 1/10 of a second
+                        #use max in case lap times are -1 (initial laps)
+                        #and min to cap to maximum 
+                        dt.total_laps = v.total_laps
+                        dt.behind = min(max(int(v.time_behind_next*10), -256), 255)
+                        #print(v.place, v.time_behind_next, dt.behind)
+                        # TODO the bloody delta
+                        dt.delta = 0
+                        self.ard_serial.write(dt.serialize())
+
 
 class DebugPrinter(DataConsumer):
     def __init__(self, client, stop_after=500):
@@ -98,3 +173,14 @@ class DebugPrinter(DataConsumer):
         self.seen +=1
         if self.seen >= self.stop_after:
             raise Exception("Raised after {} messages were dispatched".format(self.stop_after))
+            
+class FileDump(DataConsumer):
+    def __init__(self, client, filename):
+        DataConsumer.__init__(self, client)
+        self.filename = filename        
+        
+    def dispatch_message(self, tag, payload):
+        with open(self.filename, 'ba+') as f:
+            f.write(tag)
+            f.write(payload)
+    

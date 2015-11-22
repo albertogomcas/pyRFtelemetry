@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from ctypes import Structure, c_int, c_float, c_char, c_short, c_byte, sizeof
+from ctypes import Structure, c_int, c_uint8, c_float, c_char, c_short, c_byte, sizeof
 from .binary_decoder import BinaryDecoder
 
 class StructFactory(object):
@@ -32,7 +32,7 @@ class StructFactory(object):
             player_name = msg.read_string()
             prl_file = msg.read_string()
             infostruct = InfoData.from_buffer_copy(msg.data[msg.offset:])
-            #hook the variable lengh part (strings)
+            #hook the variable length part (strings)
             infostruct.track_name = track_name
             infostruct.player_name = player_name
             infostruct.prl_file = prl_file
@@ -49,7 +49,7 @@ class StructFactory(object):
         elif tag == b"VHCL":           
             msg = BinaryDecoder(payload)
             num_vehicles = msg.read_int()
-            print("info.mNumVehicles", num_vehicles)
+            #print("info.mNumVehicles", num_vehicles)
             
             vehicles = []
     
@@ -63,7 +63,7 @@ class StructFactory(object):
                 vinfo = VehicleData.from_buffer_copy(
                     msg.data[msg.offset : msg.offset+sizeof(VehicleData)]
                     )
-                #hook the variable lengh part (strings)
+                #hook the variable length part (strings)
                 vinfo.is_player = is_player
                 vinfo.player_control = player_control
                 vinfo.driver_name = driver_name
@@ -108,7 +108,7 @@ class TelemetryData(Structure):
         ("delta_time", c_float),
         ("lap_number", c_int),
         ("lap_start_ET", c_float),
-        ("possition", c_float*3),
+        ("position", c_float*3),
         ("velocity", c_float*3),
         ("acceleration", c_float*3),
         ("origx", c_float*3),
@@ -143,13 +143,13 @@ class VehicleData(Structure):
     #variable length strings are hooked later
     _fields_ = [
     ("total_laps" , c_short),
-    ("sector", c_char),
+    ("sector", c_uint8),
     ("finish_status", c_char),
     ("lap_distance", c_float),
     ("path_lateral", c_float),
     ("track_edge", c_float),
     ("in_pits" , c_char),
-    ("place", c_char),
+    ("place", c_byte),
     ("time_behind_next", c_float),
     ("laps_behind_next", c_int),
     ("time_behind_leader", c_float),
@@ -165,7 +165,7 @@ class VehicleData(Structure):
     ("num_pitstops", c_short),
     ("num_penalties", c_short),
     ("lap_start_ET", c_float),
-    ("possition", c_float*3),
+    ("position", c_float*3),
     ("velocity", c_float*3),
     ("acceleration", c_float*3),
     ("origx", c_float*3),
