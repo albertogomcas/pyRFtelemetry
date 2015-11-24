@@ -266,45 +266,70 @@ void Dispatch_Vehicle()
 void Display_Place_Behind()
 {
 	//displays current place and delta to car in front/back (if first)
-	  sprintf(display, "P% 2u % 4u", pVHCL->place, pVHCL->behind);
+	  sprintf(display, "P% 2u % 3u", pVHCL->place, pVHCL->behind);
 	  module.setDisplayToString(display, 0b0000001, 0);
 }
 
 void Display_Gear_Speed()
 {
+char gear = 0;
   switch(pTLMT->gear)
   {
     case 255:
-        display[0] = 'r';
+        gear = 'r';
         break;
     case 0:
-        display[0] = 'N';
+        gear= 'N';
         break;
     default:
-        sprintf(display, "%u", pTLMT->gear);
+        sprintf(&gear, "%u", pTLMT->gear);
   }
-  
   Vel=(pTLMT->speed);
   if (SYSTEM==ENGLISH)
   {
     Vel=round(Vel/1.609);
   }
   
-  sprintf(display+1, "% 7u", Vel);
+  sprintf(display, "%2u %c% 4u", pTLMT->lap, gear, Vel);
   module.setDisplayToString(display, 0, 0);
 }
 
 void Display_Fuel_Autonomy()
 {
-	if (pTLMT->lap <2) sprintf(display, "F% 3u A--", pTLMT->fuel);
-	else sprintf(display, "F% 3u A%2u", pTLMT->fuel, pTLMT->autonomy);
+	char gear = 0;
+  switch(pTLMT->gear)
+  {
+    case 255:
+        gear = 'r';
+        break;
+    case 0:
+        gear= 'N';
+        break;
+    default:
+        sprintf(&gear, "%u", pTLMT->gear);
+  }
+	if (pTLMT->lap <2)   sprintf(display, "%2u %cA%---", pTLMT->lap, gear);
+	else sprintf(display, "% 2u %cA%3u", pTLMT->lap, gear, pTLMT->autonomy);
 	module.setDisplayToString(display,0,0);
 }
 
 void Display_Fuel_Lap()
 	{
-	 sprintf(display, "F% 3u L% 2u", pTLMT->fuel, pTLMT->lap);
-	 module.setDisplayToString(display,0,0);
+char gear = 0;
+  switch(pTLMT->gear)
+  {
+    case 255:
+        gear = 'r';
+        break;
+    case 0:
+        gear= 'N';
+        break;
+    default:
+        sprintf(&gear, "%u", pTLMT->gear);
+  }
+
+  sprintf(display, "%2u %cF% 3u", pTLMT->lap, gear, pTLMT->fuel);
+  module.setDisplayToString(display, 0, 0);
 	}
 
 void Display_DeltaTime1()
