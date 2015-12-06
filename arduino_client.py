@@ -21,7 +21,7 @@
 This client consumes telemetry data and can feed an arduino via serial port
 """
 
-from pyRFtelemetry.consumers import ArduinoRelay
+from pyRFtelemetry.consumers import ArduinoSimpleRelay
 from pyRFtelemetry.network_client import NetworkClient
 import logging
 import threading
@@ -45,9 +45,9 @@ if __name__ == '__main__':
            
     ## open the serial port that your ardiono
     ## is connected to.
-    ser = serial.Serial("COM3", 9600, timeout=1)
+    ser = serial.Serial("COM4", 9600, timeout=1)
     
-    consumer = ArduinoRelay(client, ser)
+    consumer = ArduinoSimpleRelay(client, ser)
     try:
         consumer.main()
     finally:

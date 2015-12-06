@@ -1,10 +1,10 @@
 /*TM1638 Telemetry HUD
 Copyright (C) 2015 Alberto Gomez-Casado <albertogomcas@gmail.com>
 
-Inspired from code of batrako http://batrako.blogspot.com
-
-See https://github.com/albertogomcas/pyRFtelemetry for a python lib working 
-with this sketch 
+This a simple alternative to https://github.com/albertogomcas/pyRFtelemetry 
+Instead of passing messages with telemetry and let arduino biuld the screens,
+this builds the screens in the PC side
+Some telemetry can be passed still
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,14 +25,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
   #include <TM1638.h>
 #endif
 
-#define METRIC 1
-#define ENGLISH 0
-
-const int DATA_PIN=8;
-const int CLOCK_PIN=9;
+const int DATA_PIN=9;
+const int CLOCK_PIN=8;
 const int STROBE_PIN=7;
-
-const byte SYSTEM=METRIC; 
 
 #ifdef REVERSE
    InvertedTM1638 module(DATA_PIN, CLOCK_PIN, STROBE_PIN);
@@ -46,62 +41,40 @@ typedef struct
 {
 	byte header1;
 	byte header2;
-	byte gear;
-	int speed;  //16 bit
+	char screen[8];
+	byte dots;
 	byte ledrevs;
 	byte fuel;
 	byte grip;
-	byte lap;
-	byte autonomy;
 	byte check;
-} TelemetryDatagram, *pTelemetryDatagram;
+} Datagram, *pDatagram;
+
+pDatagram pDTG;
 
 typedef struct
 {
 	byte header1;
 	byte header2;
-	byte place;
-	byte total_laps;
-	int delta; // in 1/10 second
-	unsigned int behind; // in 1/10 second
-	byte res1;
-	byte res2;
+	byte buttons1;
+	byte buttons2; //not used
+	byte analog1;
+	byte analog2;
 	byte check;
-} VehicleDatagram, *pVehicleDatagram;
+} UpstreamData, *pUpstreamData;
 
-pTelemetryDatagram pTLMT;
-pVehicleDatagram pVHCL;
+int valid = 0;
 
-
-byte Gear,Buttons;
-byte Mode_Buttons=0; 
-int Speed, Fuel_Remaining;
-String Velocidad, Velocidad2;
-String Fuel, Fuel2;
-word Vel;
-const int DATAGRAM_LENGTH=sizeof(TelemetryDatagram);
+const int DATAGRAM_LENGTH=sizeof(Datagram);
 byte DatagramBuffer[DATAGRAM_LENGTH];
+
+pUpstreamData pUData;
+const int UDATA_LENGTH = sizeof(UpstreamData);
+byte udatabuffer[UDATA_LENGTH];
 
 //Possible datagram types
 const int HEADER1 = 0xaa;
 const int HEADER2 = 0x50;
-const int HEADER2_MASK = 0xF0;
-const int TLMT=0x01;
-const int VHCL=0x02;
 byte check = 0;
-int Tag = 0;
-
-//Possible Hud modes
-const int HUD_SPEED=0;
-const int HUD_FUEL=1;
-const int HUD_DELTA=2;
-const int HUD_PLACE=3;
-const int HUD_AUTONOMY=4;
-const int HUD_CLEAR=99;
-short int Mode_Hud = -1;
-
-char display[8];
-
 byte index;
 
 long Blink_Interval=50;
@@ -114,60 +87,36 @@ void setup()
 {
   // Initialize serial 9600 baud
   Serial.begin(9600);
-  Mode_Hud=HUD_SPEED;
-  Mode_Buttons=0;
-  if (sizeof(TelemetryDatagram) != sizeof(VehicleDatagram)) Serial.write("ERROR: Datagrams of different length");
-  if (sizeof(TelemetryDatagram) != DATAGRAM_LENGTH) Serial.write("ERROR: Wrong DATAGRAM LENGTH");
+  pUData = (pUpstreamData) udatabuffer;
+  pUData->header1 = HEADER1;
+  pUData->header2 = HEADER2;
+  
+  pDTG = (pDatagram) DatagramBuffer;
 }
 
 void loop()
 {
-  	Tag = Collect_Datagram();
-  	if(Tag) Manage_Buttons();
-  	switch(Tag)
-  		{
-  			case 0: 
-  				break;
-  			case TLMT:
-  				Dispatch_Telemetry();
-  				break;
-  			case VHCL:
-  				Dispatch_Vehicle();
-  				break;
-  		}
+  	valid = Collect_Datagram();
+  	if(valid){
+  		Dispatch();
+  		Send_Upstream();
+  	}
+
+
 }
 
-void Manage_Buttons()
+void Send_Upstream()
 {
-	Buttons=module.getButtons();
-	switch(Buttons)
-		{
-	    case 1:
-	    	Mode_Buttons=HUD_SPEED;
-	        break;
-	    case 2: 
-	       	Mode_Buttons=HUD_FUEL;
-	        break;
-	    case 4:
-	    	Mode_Buttons=HUD_AUTONOMY;
-	    	break;
-	    case 8:
-	    	Mode_Buttons=HUD_PLACE;
-	    	break;
-	    case 16:
-	    	Mode_Buttons=HUD_DELTA;
-	    	break;
-	    case 128: 
-	       	Mode_Buttons=HUD_CLEAR;
-	        break;
-	    default:
-	    	Mode_Buttons=Mode_Hud;
-	    	break;
-	     }
-	if(Mode_Buttons != Mode_Hud) module.clearDisplay();
+	pUData->buttons1 = module.getButtons();
+	// fill other fields if needed
 
-	Mode_Hud = Mode_Buttons;
+	//add the check
+	udatabuffer[UDATA_LENGTH-1] = udatabuffer[0];
+	for (index=1; index<UDATA_LENGTH-1; index++){
+		udatabuffer[UDATA_LENGTH-1] ^= udatabuffer[index];	
+	}
 
+	Serial.write(udatabuffer, UDATA_LENGTH);
 }
 
 
@@ -181,7 +130,7 @@ int Collect_Datagram()
 
         if (DatagramBuffer[0]==HEADER1) 
         {
-          if ((Serial.peek() & HEADER2_MASK) == HEADER2)
+          if (Serial.peek() == HEADER2)
           {
 	          check = DatagramBuffer[0];
 	          for (index=1; index<DATAGRAM_LENGTH; index++)
@@ -192,20 +141,17 @@ int Collect_Datagram()
 	          }
           
 	        if (DatagramBuffer[DATAGRAM_LENGTH-1] == check) //test no corrupted packet
-	        	return DatagramBuffer[1] & ~HEADER2_MASK; //the tag
-	        else
-	        	Serial.write(DatagramBuffer, DATAGRAM_LENGTH);
+	        	return 1; //valid
           }
         }
 	}
 	return 0; // no data in serial or no valid datagram
 }
 
-void Dispatch_Telemetry()
+void Dispatch()
 {
-	pTLMT = (pTelemetryDatagram) DatagramBuffer;
 	//Always update LEDs
-    if (pTLMT->ledrevs == 9)
+    if (pDTG->ledrevs == 9)
        	{
        	CurrentMillis=millis();
         if (CurrentMillis - PreviousMillis > Blink_Interval)
@@ -228,111 +174,10 @@ void Dispatch_Telemetry()
         }
         else
           	{
-            module.setLEDs(leds[pTLMT->ledrevs]);
+            module.setLEDs(leds[pDTG->ledrevs]);
             Leds_up=false;
             estado_leds=65535;
           	}
-          	
-	//Depending of mode we may update the display
-	switch (Mode_Hud)
-		{
-		case HUD_SPEED: 
-			Display_Gear_Speed();
-			break;
-		case HUD_FUEL: 
-			Display_Fuel_Lap();
-			break;
-		case HUD_AUTONOMY:
-			Display_Fuel_Autonomy();
-			break;
-		}
-}
 
-void Dispatch_Vehicle()
-{
-	pVHCL = (pVehicleDatagram) DatagramBuffer;
-	//Depending of mode we may update the display
-	switch (Mode_Hud)
-		{
-		case HUD_DELTA: 
-			Display_DeltaTime1();
-			break;
-		case HUD_PLACE:
-			Display_Place_Behind();
-			break;
-		}	
-}
-
-void Display_Place_Behind()
-{
-	//displays current place and delta to car in front/back (if first)
-	  sprintf(display, "P% 2u % 3u", pVHCL->place, pVHCL->behind);
-	  module.setDisplayToString(display, 0b0000001, 0);
-}
-
-void Display_Gear_Speed()
-{
-char gear = 0;
-  switch(pTLMT->gear)
-  {
-    case 255:
-        gear = 'r';
-        break;
-    case 0:
-        gear= 'N';
-        break;
-    default:
-        sprintf(&gear, "%u", pTLMT->gear);
-  }
-  Vel=(pTLMT->speed);
-  if (SYSTEM==ENGLISH)
-  {
-    Vel=round(Vel/1.609);
-  }
-  
-  sprintf(display, "%2u %c% 4u", pTLMT->lap, gear, Vel);
-  module.setDisplayToString(display, 0, 0);
-}
-
-void Display_Fuel_Autonomy()
-{
-	char gear = 0;
-  switch(pTLMT->gear)
-  {
-    case 255:
-        gear = 'r';
-        break;
-    case 0:
-        gear= 'N';
-        break;
-    default:
-        sprintf(&gear, "%u", pTLMT->gear);
-  }
-	if (pTLMT->lap <2)   sprintf(display, "%2u %cA%---", pTLMT->lap, gear);
-	else sprintf(display, "% 2u %cA%3u", pTLMT->lap, gear, pTLMT->autonomy);
-	module.setDisplayToString(display,0,0);
-}
-
-void Display_Fuel_Lap()
-	{
-char gear = 0;
-  switch(pTLMT->gear)
-  {
-    case 255:
-        gear = 'r';
-        break;
-    case 0:
-        gear= 'N';
-        break;
-    default:
-        sprintf(&gear, "%u", pTLMT->gear);
-  }
-
-  sprintf(display, "%2u %cF% 3u", pTLMT->lap, gear, pTLMT->fuel);
-  module.setDisplayToString(display, 0, 0);
-	}
-
-void Display_DeltaTime1()
-{
-  module.setDisplayToString("to do");
+	module.setDisplayToString(pDTG->screen, pDTG->dots);
 }
